@@ -1,0 +1,271 @@
+-- Carrega a biblioteca OrionLib
+local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Orion/main/source'))()
+
+-- Cria a janela principal
+local Window = OrionLib:MakeWindow({
+    Name = "Ark Hub",  -- Título da biblioteca
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "OrionTest"
+})
+
+-- Cria a aba "Macro Settings" e limpa seu conteúdo
+local MacroSettingsTab = Window:MakeTab({
+    Name = "Macro Settings",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- Adiciona uma caixa de texto na aba "Macro Settings"
+local fileNameTextbox = MacroSettingsTab:AddTextbox({
+    Name = "File",
+    Default = "Enter file name",
+    TextDisappear = true,
+    Callback = function(Value)
+        fileName = Value
+    end
+})
+
+-- Adiciona uma caixa de seleção para escolher arquivos salvos
+local fileDropdown = MacroSettingsTab:AddDropdown({
+    Name = "Select Saved File",
+    Default = "",
+    Options = {},  -- Inicialmente vazio, será preenchido mais tarde
+    Callback = function(Value)
+        fileName = Value
+    end
+})
+
+-- Adiciona um botão de atualização para recarregar a lista de arquivos
+MacroSettingsTab:AddButton({
+    Name = "Refresh Files",
+    Callback = function()
+        updateFileDropdown()
+    end
+})
+
+-- Adiciona uma nova aba "Misc" e adiciona os campos necessários
+local MiscTab = Window:MakeTab({
+    Name = "Misc",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- Variáveis para armazenar dados
+local webhookURL = ""
+local discordID = ""
+local recordMovements = false
+local movements = {}
+
+-- Adiciona campo de texto para o webhook
+MiscTab:AddTextbox({
+    Name = "Webhook URL",
+    Default = "",
+    TextDisappear = true,
+    Callback = function(Value)
+        webhookURL = Value
+        OrionLib:MakeNotification({
+            Name = "Webhook URL Set",
+            Content = "Webhook URL has been set.",
+            Image = "rbxassetid://4483345998",
+            Time = 5
+        })
+    end
+})
+
+-- Adiciona campo de texto para o Discord ID
+MiscTab:AddTextbox({
+    Name = "Discord ID",
+    Default = "",
+    TextDisappear = true,
+    Callback = function(Value)
+        discordID = Value
+        OrionLib:MakeNotification({
+            Name = "Discord ID Set",
+            Content = "Discord ID has been set.",
+            Image = "rbxassetid://4483345998",
+            Time = 5
+        })
+    end
+})
+
+-- Adiciona toggle para gravar movimentos do jogador
+MiscTab:AddToggle({
+    Name = "Record Player Movements",
+    Default = false,
+    Callback = function(Value)
+        recordMovements = Value
+        if recordMovements then
+            OrionLib:MakeNotification({
+                Name = "Recording Started",
+                Content = "Player movements will now be recorded.",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+            -- Inicia a gravação de movimentos
+            local player = game.Players.LocalPlayer
+            local function onCharacterAdded(character)
+                local humanoid = character:WaitForChild("Humanoid")
+                humanoid.Running:Connect(function(speed)
+                    if recordMovements then
+                        table.insert(movements, {
+                            Type = "Running",
+                            Speed = speed,
+                            Time = tick()
+                        })
+                    end
+                end)
+                humanoid.Jumping:Connect(function()
+                    if recordMovements then
+                        table.insert(movements, {
+                            Type = "Jumping",
+                            Time = tick()
+                        })
+                    end
+                end)
+                humanoid.FreeFalling:Connect(function()
+                    if recordMovements then
+                        table.insert(movements, {
+                            Type = "FreeFalling",
+                            Time = tick()
+                        })
+                    end
+                end)
+            end
+
+            player.CharacterAdded:Connect(onCharacterAdded)
+            if player.Character then
+                onCharacterAdded(player.Character)
+            end
+        else
+            OrionLib:MakeNotification({
+                Name = "Recording Stopped",
+                Content = "Player movements will no longer be recorded.",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+        end
+    end
+})
+
+-- Adiciona botão para enviar uma mensagem de teste ao webhook
+MiscTab:AddButton({
+    Name = "Send Test Message",
+    Callback = function()
+        if webhookURL == "" then
+            OrionLib:MakeNotification({
+                Name = "Error",
+                Content = "Please set a valid webhook URL.",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+            return
+        end
+
+        if discordID == "" then
+            OrionLib:MakeNotification({
+                Name = "Error",
+                Content = "Please set a valid Discord ID.",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+            return
+        end
+
+        local httpService = game:GetService("HttpService")
+        local playerName = game.Players.LocalPlayer.Name
+        local status = "Test Status"
+        local rewards = "Test Rewards"
+        local mention = "<@" .. discordID .. "> " -- Formata a menção do Discord
+        local message = "**Player:** " .. playerName .. "\n" ..
+                        "**Status:** " .. status .. "\n" ..
+                        "**Rewards:** " .. rewards .. "\n"
+
+        local data = { content = mention .. message }
+        local jsonData = httpService:JSONEncode(data)
+
+        local success, response = pcall(function()
+            return httpService:PostAsync(webhookURL, jsonData, Enum.HttpContentType.ApplicationJson)
+        end)
+
+        if success then
+            OrionLib:MakeNotification({
+                Name = "Success",
+                Content = "Test message sent to Discord.",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+        else
+            OrionLib:MakeNotification({
+                Name = "Error",
+                Content = "Failed to send message to Discord: " .. tostring(response),
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+        end
+    end
+})
+
+-- Adiciona botão para salvar o arquivo com os movimentos gravados
+MiscTab:AddButton({
+    Name = "Save Recorded Movements",
+    Callback = function()
+        if fileName == "" then
+            OrionLib:MakeNotification({
+                Name = "Error",
+                Content = "Please enter a file name in the Macro Settings tab.",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+            return
+        end
+
+        local httpService = game:GetService("HttpService")
+        local jsonData = httpService:JSONEncode(movements)
+
+        local success, response = pcall(function()
+            writefile(fileName .. ".json", jsonData)
+        end)
+
+        if success then
+            OrionLib:MakeNotification({
+                Name = "Success",
+                Content = "Movements saved to file: " .. fileName .. ".json",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+            -- Atualiza a caixa de seleção com o novo arquivo salvo
+            updateFileDropdown()
+        else
+            OrionLib:MakeNotification({
+                Name = "Error",
+                Content = "Failed to save movements: " .. tostring(response),
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+        end
+    end
+})
+
+-- Função para atualizar a caixa de seleção com arquivos existentes
+local function updateFileDropdown()
+    local files = {}
+    local success, response = pcall(function()
+        return listfiles("OrionTest/")
+    end)
+    if success then
+        for _, fileName in ipairs(response) do
+            table.insert(files, fileName)
+        end
+        fileDropdown:Refresh(files, true)
+    end
+end
+
+-- Atualiza a caixa de seleção com arquivos existentes na inicialização
+updateFileDropdown()
+
+-- Inicializa a interface
+OrionLib:Init()
+
+-- Função para destruir a interface (se necessário)
+-- OrionLib:Destroy()
